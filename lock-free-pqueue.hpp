@@ -17,30 +17,53 @@
  * 	of records.
  */
 
-#pragma once
+#ifndef _LOCK_FREE_PQUEUE_HPP_
+#define _LOCK_FREE_PQUEUE_HPP_
 
-#ifndef _SKIP_LIST_HPP_
-#define _SKIP_LIST_HPP_
+/* forward declarations */
+class Node;
+class SkipList;
 
-struct PQNode
+/* 	Each Node will maintain a:
+ *		value, 
+ * 		height, 
+ * 		and a list of Nodes that follow it
+ */
+class Node
 {
-	PQNode() {}
-
-	PQNode(int height, int val) : val_(val), height_(height) {
-		nxt_ = new struct PQNode *[height_];
-		
-		for (int i = 0; i < height_; ++i) {
-			nxt_[i] = new PQNode; /* unsure how to get around this */
-			nxt_[i]->val_ = val_;
-			nxt_[i]->height_ = height_;
-		}
-	}
-
-	int val_;
-	int height_;
-	struct PQNode** nxt_;
+public:
+	Node(int height, int val);
+	
+	/* these members could be private, but this is easier */
+	int val_, height_;
+	Node** nxt_;
 };
 
+/*
+ * 	The skip list will maintain a head node and a `sentinel' that serves
+ *	as the `tail' of the list.
+ */
+class SkipList
+{
+public:
+	SkipList();
 
-#endif /* _SKIP_LIST_HPP_ */
+	void insert(int val);
+	bool contains(int val);
+	// void remove(int val);
 
+	void print(); /* used for debugging */
+
+
+private:
+	int size_, maxHeight_;
+	Node *head_, *tail_;
+
+	Node* findNode(int val);
+	Node* insertNode(int val);
+	void resize(int lvl);
+	int chooseRandomHeight();
+
+};
+
+#endif /* _LOCK_FREE_PQUEUE_HPP_ */
