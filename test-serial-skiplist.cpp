@@ -28,7 +28,8 @@ main()
 	} else {
 		std::cout << "\033[1;31mFAILED\033[0m: " << "checkUnique\n"; 
 	}
-	checkUnique();
+
+
 
 	return 0;
 }
@@ -68,6 +69,8 @@ checkInsertAndLookup()
 		std::cout << "some values should not be in the list\n";
 		return false;
 	}
+
+	l.print();
 
 	return true;
 }

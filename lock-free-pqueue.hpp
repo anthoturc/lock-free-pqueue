@@ -50,7 +50,7 @@ public:
 
 	bool insert(int val);
 	bool contains(int val);
-	// void remove(int val);
+	bool remove(int val);
 
 	void print(); /* used for debugging */
 

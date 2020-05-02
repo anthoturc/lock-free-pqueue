@@ -124,6 +124,48 @@ SkipList::findNode(int val)
 	return tmp;
 }
 
+
+bool
+SkipList::remove(int val)
+{
+	return removeNode(val);
+}
+
+bool 
+removeNode(int val)
+{
+	Node **lvlUpdates = new Node *[maxHeight_];
+	Node *tmp = head_;
+	int currHeight = maxHeight_ - 1;
+	
+	/* search for the node to delete, and in the process, collect
+	 nodes that will be updated */
+	while (currHeight >= 0) {
+		while (tmp->nxt_[currHeight] && tmp->nxt_[currHeight]->val_ < val) {
+			tmp = tmp->nxt[currHeight];
+		}
+		lvlUpdates[currHeight] = tmp;
+		--currHeight;
+	}
+
+	if (!tmp || !tmp->nxt_[0] || tmp->nxt_[0]->val_ != val) return false;
+
+	for (int i = 0; i < maxHeight_; ++i) {
+		/* if we reach a level whose nxt pointer is not tmp
+		then we can be sure that the upper levels will not either
+		this is because the nxt pointers of all previous levels must
+		point to the same nxt pointer if THIS level will also point to the 
+		nxt pointer*/
+		if (lvlUpdates[i]->nxt_[i] != tmp) break;
+		/* adjust the nxt pointers */
+		lvlUpdates[i]->nxt_[i] = tmp->nxt_[i];
+	}
+
+	/* memory leak right here (should delete the node) */
+	/* also, what if we have a bunch of empty top most levels :b (not going to delete) */
+	return false;
+}
+
 void 
 SkipList::resize(int lvl)
 { 
