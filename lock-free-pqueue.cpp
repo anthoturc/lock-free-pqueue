@@ -17,7 +17,7 @@ Node::Node(int val, int height) : val_(val), height_(height) {
 }
 
 
-SkipList::SkipList() : size_(0), maxHeight_(3)
+SkipList::SkipList() : size_(0), maxHeight_(1)
 {
 	/* random seed */
 	srand(time(NULL));
@@ -40,15 +40,17 @@ SkipList::SkipList() : size_(0), maxHeight_(3)
 }
 
 /* return true if successfully inserted, false otherwise */
-void
+bool
 SkipList::insert(int val)
 {
-	insertNode(val);	
+	return insertNode(val) != nullptr;	
 }
 
 Node *
 SkipList::insertNode(int val)
 {
+
+	if (contains(val)) return nullptr;
 	/* choose a randome height for this node */
 	int randHeight = chooseRandomHeight();
 
@@ -148,13 +150,14 @@ SkipList::print()
 	Node *tmp = head_;
 
 	for (int i = 0; i < maxHeight_; ++i) {
-		std::cout << "-\t";
+		std::cout << "-  ";
 	}
 	std::cout << "\n";
 
 	for (int i = 0; i < size_; ++i) {
+		std::cout << tmp->nxt_[0]->val_ << " ";
 		for (int cnt = tmp->nxt_[0]->height_; cnt > 0; --cnt) {
-			std::cout << tmp->nxt_[0]->val_ << "\t";
+			std::cout << "-  ";
 		}
 		std::cout << "\n";
 		tmp = tmp->nxt_[0];

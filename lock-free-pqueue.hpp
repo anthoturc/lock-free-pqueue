@@ -48,7 +48,7 @@ class SkipList
 public:
 	SkipList();
 
-	void insert(int val);
+	bool insert(int val);
 	bool contains(int val);
 	// void remove(int val);
 
