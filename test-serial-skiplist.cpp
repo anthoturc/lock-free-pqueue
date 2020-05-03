@@ -111,30 +111,19 @@ removeVals()
 		l.insert(i);
 	}
 
-	// l.print();
+	for (int i = 0; i < 10; ++i) {
+		if (!l.remove(i)) {
+			std::cout << "coud not remove " << i << "\n";
+			return false;
+		}
 
-	if (!l.remove(0)) {
-		std::cout << "coud not remove 0\n";
-		return false;
+		if (l.contains(i)) {
+			std::cout << "skiplist contains " << i << "\n";
+			return false;
+		}
 	}
 
-	if (l.contains(0)) {
-		std::cout << "skiplist contains 0\n";
-		return false;
-	}
-
-	// l.print();
-
-	if (!l.remove(9)) {
-		std::cout << "could not remove 9\n";
-		return false;
-	}
-
-	if (l.contains(9)) {
-		std::cout << "skiplist contains 9\n";
-		return false;
-	}
-
+	if (l.remove(0)) return false;
 	// l.print();
 
 	return true;

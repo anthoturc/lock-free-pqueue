@@ -95,6 +95,7 @@ SkipList::insertNode(int val)
 bool
 SkipList::contains(int val)
 {
+	if (size_ == 0) return false;
 	/* check if the value returned */
 	Node *nodeFound = findNode(val); 
 	if (!nodeFound) return false;
@@ -127,6 +128,7 @@ SkipList::findNode(int val)
 bool
 SkipList::remove(int val)
 {
+	if (size_ == 0) return false;
 	return removeNode(val) != nullptr;
 }
 
