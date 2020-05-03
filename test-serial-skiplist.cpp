@@ -11,8 +11,7 @@ bool containsAllVals(std::vector<int>&, SkipList&);
 bool shouldNotContain(std::vector<int>&, SkipList&);
 bool checkUnique();
 bool checkInsertAndLookup();
-
-
+bool removeVals();
 int
 main()
 {
@@ -27,6 +26,13 @@ main()
 		std::cout << "\033[1;32mPASSED\033[0m: " << "checkUnique\n"; 
 	} else {
 		std::cout << "\033[1;31mFAILED\033[0m: " << "checkUnique\n"; 
+	}
+
+	std::cout << "-----------\n";
+	if (removeVals()) {
+		std::cout << "\033[1;32mPASSED\033[0m: " << "removeVals\n"; 
+	} else {
+		std::cout << "\033[1;31mFAILED\033[0m: " << "removeVals\n"; 
 	}
 
 
@@ -70,7 +76,7 @@ checkInsertAndLookup()
 		return false;
 	}
 
-	l.print();
+	// l.print();
 
 	return true;
 }
@@ -93,6 +99,43 @@ shouldNotContain(std::vector<int>& vals, SkipList& l)
 		if (!vals[i])
 			if (l.contains(i)) return false;
 	}
+
+	return true;
+}
+
+bool 
+removeVals()
+{
+	SkipList l;
+	for (int i = 0; i < 10; ++i) {
+		l.insert(i);
+	}
+
+	// l.print();
+
+	if (!l.remove(0)) {
+		std::cout << "coud not remove 0\n";
+		return false;
+	}
+
+	if (l.contains(0)) {
+		std::cout << "skiplist contains 0\n";
+		return false;
+	}
+
+	// l.print();
+
+	if (!l.remove(9)) {
+		std::cout << "could not remove 9\n";
+		return false;
+	}
+
+	if (l.contains(9)) {
+		std::cout << "skiplist contains 9\n";
+		return false;
+	}
+
+	// l.print();
 
 	return true;
 }

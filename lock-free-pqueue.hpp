@@ -61,6 +61,7 @@ private:
 
 	Node* findNode(int val);
 	Node* insertNode(int val);
+	Node* removeNode(int val);
 	void resize(int lvl);
 	int chooseRandomHeight();
 
