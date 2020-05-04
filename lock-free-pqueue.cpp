@@ -224,7 +224,7 @@ PQueue::readNext(Node **node1, int lvl)
 
 	Node *node2 = readNode(*(node1)->nxt_[lvl]);
 	while (node2 == nullptr) {
-		
+		*node1 = helpDelete()
 	}
 
 }
