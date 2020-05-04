@@ -14,8 +14,13 @@ Node::Node(int val, int height) : val_(val), height_(height) {
 	for (int i = 0; i < height_; ++i) {
 		nxt_[i] = nullptr;
 	}
-}
 
+	/* these are not used in the serial SkipList implementation
+	 * but they are made use of in the in the paper. 	
+	 */
+	prev_ = nullptr;
+	validheight_ = 0;
+}
 
 SkipList::SkipList() : size_(0), maxHeight_(1)
 {
@@ -205,4 +210,21 @@ SkipList::print()
 		std::cout << "\n";
 		tmp = tmp->nxt_[0];
 	}
+}
+
+
+PQueue::PQueue() : size_(0) {}
+
+Node *
+PQueue::readNext(Node **node1, int lvl)
+{
+	if (isMarked((*node1)->val_)) {
+		*node1 = helpDelete(*node1, lvl);
+	}
+
+	Node *node2 = readNode(*(node1)->nxt_[lvl]);
+	while (node2 == nullptr) {
+		
+	}
+
 }

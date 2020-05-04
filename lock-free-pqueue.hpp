@@ -34,14 +34,17 @@ class Node
 public:
 	Node(int height, int val);
 	
-	/* these members could be private, but this is easier */
-	int val_, height_;
-	Node** nxt_;
+	/* these members are based on those foudnd in the paper listed above */
+	int val_, 
+		height_, 
+		validheight_;
+	Node** nxt_, * prev_;
 };
 
 /*
- * 	The skip list will maintain a head node and a `sentinel' that serves
- *	as the `tail' of the list.
+ * 	My implementation of the skip list to be used by non parallel programs
+ *
+ *	I wrote this to help with my understanding of the data structure. 
  */
 class SkipList
 {
@@ -66,5 +69,27 @@ private:
 	int chooseRandomHeight();
 
 };
+
+/*
+ * 	This implementation of the skip list is based on the 
+ *	implementation presented in the paper  
+ */
+class PQueue
+{
+public:
+	PQueue();
+
+	bool push(int val); /* equivalent to the insert method in the paper */
+	Node* pop(); /* equivalent to the deletemin method in the paper */
+
+private:
+	/* used to traverse nodes in the skiplist */
+	Node *readNext(Node **node1, int lvl);
+	Node *scanKey(Node *node1, int lvl, int val);
+	Node *helpDelete(Node *node1, int lvl);
+
+	int size_;
+};
+
 
 #endif /* _LOCK_FREE_PQUEUE_HPP_ */
