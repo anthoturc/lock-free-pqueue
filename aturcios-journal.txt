@@ -1,0 +1,77 @@
+April 27, 2020
+
+1:42 PM - 2:42 PM (1 hr)
+
+Looked at williams book for potential lock free data structure
+to implement for project. Read majority of chapter 7 (wow).
+
+Decided to design a lock-free priority queue.
+
+
+April 28, 2020
+
+6:30 PM -8:00 PM (1.5 hrs)
+
+Read paper 
+
+(http://www.non-blocking.com/download/SunT03_PQueue_TR.pdf) 
+
+to get a start on an implementation of a lock-free data structure. This paper uses
+a skip list to implement the priority queue. Looked at basics of skip list and 
+began implementing the data structure.
+
+
+May 1, 2020
+
+4:30 PM - 5:30 PM (1 hr)
+
+Writing/testing the serial implmentation of the skiplist class. Debugging error related to 
+tail of skiplist
+
+8:30 PM - 9:30 PM (1 hr)
+
+Debugging and testing serial implementation of skiplist class for insertion
+and lookup. Ensured data is in increasing order (this will be a min priority queue).
+
+9:30 PM - 11:30 PM (2 hr)
+
+Finished implementing remove and testing the serial skiplist implementation. 
+
+May 3, 2020
+
+2:00 PM - 3:00 PM (1 hr)
+
+Found segfault bug related to updating the size of the skiplist after removal. Fixed this
+and tested the removal of items.
+
+3:00 PM - 4:00 PM (1hr)
+
+Began implementing the design presented in the paper. Also reading 
+over paper again to solidify understanding.
+
+Week 1 Total Time: 8.5 hrs
+
+Reflection on first week:
+My first week consisted of familiarizing myself with the skiplist data structure by implementing it. 
+Throughout this week I also looked over a paper (http://www.non-blocking.com/download/SunT03_PQueue_TR.pdf) 
+--and a more updated version (cse.chalmers.se/~tsigas/papers/JPDC-Lock-free-skip-lists-and-Queues.pdf)--that 
+presented a design for the lock-free concurrent priority queue.
+
+
+May 4, 2020
+
+1:00 PM - 2:00 PM (1 hr)
+
+Redid the node structure to conform to the paper's design, changed the signatures of 
+the class methods and implemented insert and delete min
+
+May 5, 2020
+
+12:15 PM - 2:15 PM (2 hr)
+
+Discussed CAS bug with Professor Linderman and implemented changes to use PQLink's
+`w' field for the compare and swap. Also implemented masking to extract the pointer 
+and the boolean set flag. 
+
+I made use of the uintptr_t for the size of the pointer because I felt that this was explicit.
+I could have made use of size_t as well.

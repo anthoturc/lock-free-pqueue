@@ -86,7 +86,7 @@ private:
  */
 union PQLink
 {
-	int32_t w; /* paper uses this to when a node should be deleted */
+	uintptr_t w; /* paper uses this to when a node should be deleted */
 	struct
 	{
 		PQNode* node;
@@ -96,7 +96,7 @@ union PQLink
 
 union PQVLink
 {
-	int32_t w; /* paper uses this to determine when to delete */
+	uintptr_t w; /* paper uses this to determine when to delete */
 	struct
 	{
 		int *p; /* assuming that the values are all integers */
