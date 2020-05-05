@@ -6,7 +6,9 @@
 
 #include "lock-free-pqueue.hpp"
 
-Node::Node(int val, int height) : val_(val), height_(height) {
+Node::Node(int val, int height) 
+	: val_(val), height_(height) 
+{
 	/* 	would like to use a vector, but I do not know how
 	 *	that would the locking strats in the paper
 	 */
@@ -19,9 +21,12 @@ Node::Node(int val, int height) : val_(val), height_(height) {
 	 * but they are made use of in the in the paper. 	
 	 */
 	prev_ = nullptr;
-	validheight_ = 0;
+	validLvl_ = 0;
 }
 
+/**********************************************/
+/*					   Serial Skip List`							*/
+/**********************************************/
 SkipList::SkipList() : size_(0), maxHeight_(1)
 {
 	/* random seed */
@@ -212,8 +217,145 @@ SkipList::print()
 	}
 }
 
+/**********************************************/
+/*					   Parallel Skip List`						*/
+/**********************************************/
 
-PQueue::PQueue() : size_(0) {}
+#define DEFAULT_MAX_LVL 10 /* corresponds to around 2^10 levels */
+
+PQueue::PQueue() : PQueue(DEFAULT_MAX_LVL) {}
+
+PQueue::PQueue(int maxLevel) : size_(0), maxLevel_(maxLevel) {}
+
+bool
+PQueue::push(int key, int *val)
+{
+	Node *node1, *node2, *newNode;
+	Node **savedNodes = new Node *[maxLevel_];
+
+	int level = randomLevel(); 
+	newNode = createNode(level, key, val);
+	copyNode(newNode);
+	node1 = copyNode(head_);
+
+	for (int i = maxLevel_ - 1; i >= 1; --i) {
+		node2 = scanKey(&node1, i, key);
+		releaseNode(node2);
+		if (i < level) {
+			savedNodes[i] = copyNode(node1);
+		}
+	}
+
+	while (true) {
+		node2 = scanKey(&node1, 0, val);
+		PQVLink val2 = node2->val_;
+
+		if (!isMarked(val2) && node2->key_ != key) {
+			if (__sync_bool_compare_and_swap(&(node2->val_), val2, val)) {
+				releaseNode(node1);
+				releaseNode(node2);
+				for (int i  = 1; i < level - 1; ++i) {
+					releaseNode(savedNodes[i])
+				}
+				releaseNode(newNode);
+				releaseNode(newNode);
+				return true;
+			} else {
+				releaseNode(node2);
+				continue;
+			}
+		}
+
+		newNode->nxt_[0]->ptr32 = { node2, false };
+		releaseNode(node2);
+		if (__sync_bool_compare_and_swap(&(node1->nxt_[0]), { node2, false }, { newNode, false })) {
+			releaseNode(node1);
+			break;
+		}
+	}
+
+	for (int i = 0; i < randLvl; ++i) {
+		newNode->validLvl_ = i;
+		node1 = savedNodes[i];
+
+		while (true) {
+			node2 = scanKey(&node1, i, val);
+			newNode->nxt_[i]->ptr32 = { node2, false };
+			releaseNode(node2);
+			if (isMarked(newNode->val_) ||
+				__sync_bool_compare_and_swap(&(node1->nxt_[i]), node1->nxt_[i], { newNode, false })) {
+				releaseNode(node1);
+				break;
+			}
+		}
+	}
+
+	newNode->validLvl_ = level;
+	if (isMarked(newNode->val_)) {
+		newNode = helpDelete(newNode, 0);
+	}
+
+	releaseNode(newNode);
+	return true;
+}
+
+int *
+PQueue::pop()
+{
+	Node *prev, 
+		*last, 
+		*node1, 
+		*node2;
+
+	prev = copyNode(head_);
+	while (true) {
+		node1 = readNext(&prev, 0);
+		if (node1 == tail_) {
+			releaseNode(prev);
+			releaseNode(node1);
+			return nullptr;
+		}
+	retry: /* it was cool to see this forbidden jutsu being used */
+		PQVLink valLink = node1->val_;
+		int *val = valLink.ptr32.p;
+		bool del = valLink.ptr32.del;
+
+		if (node1 != prev->nxt_[0]->ptr32.node) {
+			releaseNode(node1);
+			continue;
+		}
+
+		if (!del) {
+			if (__sync_bool_compare_and_swap(&(node1->val_), valLink, { val, true })) {
+				node1->prev_ = prev;
+				break;
+			} else goto retry;
+		} else if (del) { // why did they do this?
+			node1 = helpDelete(node1, 0);
+		}
+		releaseNode(prev);
+		prev = node1;
+	}
+
+	for (int i = 0; i < node1->lvl_ - 1; ++i) {
+		do {
+			PQLink& v = node1->nxt_[i];
+		} while (v.ptr32.del || __sync_bool_compare_and_swap(&(node1->nxt_[i]), { node2, false }, { node2, true }));
+	}
+	prev = copyNode(head);
+	for (int i = node1->lvl_ - 1; i >= 0; --i) {
+		removeNode(node1, &prev, i);
+	}
+
+	PQVLink val = node1->val_;
+
+	releaseNode(prev);
+	releaseNode(node1);
+	releaseNode(node1);
+
+	return val.ptr32.p;
+}
+
 
 Node *
 PQueue::readNext(Node **node1, int lvl)
@@ -222,9 +364,86 @@ PQueue::readNext(Node **node1, int lvl)
 		*node1 = helpDelete(*node1, lvl);
 	}
 
-	Node *node2 = readNode(*(node1)->nxt_[lvl]);
-	while (node2 == nullptr) {
-		*node1 = helpDelete()
+	Node *node2 = readNode((*node1)->nxt_[lvl]);
+	while (!node2) {
+		*node1 = helpDelete(*node1, lvl);
+		node2 = readNode((*node1)->nxt_[lvl]);
 	}
 
+	return node2;
 }
+
+bool 
+PQueue::isMarked(PQVLink& val)
+{
+	return val.ptr32.del;
+}
+
+Node *
+PQueue::scanKey(Node **node1, int lvl, int key)
+{
+	Node *node2 = readNext(node1, lvl);
+	while (node2->key_ < key) {
+		releaseNode(*node1);
+		*node1 = node2;
+		node2 = readNext(node1, lvl);
+	}
+	return node2;
+}
+
+PQNode *
+PQueue::createNode(int lvl, int key, int *val)
+{
+	PQNode *node = mallocNode();
+	node->prev_ = nullptr;
+	node->validLvl_ = 0;
+	node->lvl_ = lvl;
+	node->key_ = key;
+	node->nxt_ = new PQLink[lvl];
+	node->val_.ptr32 = { val, false };
+	return node;
+}
+
+PQNode *
+PQueue::mallocNode()
+{
+	/* I really do not know what they did here :/ */
+	return new PQNode;
+}
+
+PQNode *
+PQueue::readNode(PQLink& addr)
+{
+	/* node marked for deletion, so return a nullptr */
+	if (addr.ptr32.del) return nullptr;
+
+	return addr.ptr32.node;
+}
+
+PQNode *
+PQueue::copyNode(PQNode *node)
+{
+
+}
+
+void
+PQueue::removeNode(Node *node, Node **prev, int level)
+{
+	Node *last;
+
+	while (true) {
+		PQLink l = node->nxt_[level];
+
+		if (l.ptr32.node == nullptr && l.ptr32.del) {
+			break;
+		}
+
+		last = scanKey(prev, level, node->key_);
+		releaseNode(last);
+
+		PQVLink v; = { nullptr, true };
+		if (last != node || )
+	}
+}
+
+void releaseNode(PQNode *node);

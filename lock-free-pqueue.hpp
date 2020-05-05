@@ -20,9 +20,13 @@
 #ifndef _LOCK_FREE_PQUEUE_HPP_
 #define _LOCK_FREE_PQUEUE_HPP_
 
+#include <cstdint>
+
 /* forward declarations */
 class Node;
 class SkipList;
+class PQNode;
+class PQueue;
 
 /* 	Each Node will maintain a:
  *		value, 
@@ -37,7 +41,7 @@ public:
 	/* these members are based on those foudnd in the paper listed above */
 	int val_, 
 		height_, 
-		validheight_;
+		validLvl_;
 	Node** nxt_, * prev_;
 };
 
@@ -70,6 +74,51 @@ private:
 
 };
 
+/**********************************************/
+/*					   Parallel Skip List`						*/
+/**********************************************/
+
+/* the remainder of this file is based on the paper (linked above) */
+
+/*
+ *	allows for using the last bit of the pointer
+ *	as a true/false value (see paper)
+ */
+union PQLink
+{
+	int32_t w; /* paper uses this to when a node should be deleted */
+	struct
+	{
+		PQNode* node;
+		bool del;		
+	} ptr32;
+};
+
+union PQVLink
+{
+	int32_t w; /* paper uses this to determine when to delete */
+	struct
+	{
+		int *p; /* assuming that the values are all integers */
+		bool del;
+	} ptr32;
+};
+
+/*
+ *	The `key_' field of the PQueue Node will
+ *	simply hold keys. With enough time I may be able to implement
+ *	a version of the PQNode that also holds an arbitrary value
+ */
+struct PQNode
+{
+	int lvl_, 
+		key_, 
+		validLvl_;
+	PQLink *nxt_;
+	PQVLink val_;
+	PQNode *prev_;
+};
+
 /*
  * 	This implementation of the skip list is based on the 
  *	implementation presented in the paper  
@@ -77,18 +126,37 @@ private:
 class PQueue
 {
 public:
+	PQueue(int maxLevel_);
 	PQueue();
-
-	bool push(int val); /* equivalent to the insert method in the paper */
-	Node* pop(); /* equivalent to the deletemin method in the paper */
+	bool push(int key, int* val); /* equivalent to the insert method in the paper */
+	int* pop(); /* equivalent to the deletemin method in the paper */
 
 private:
+	PQNode *createNode(int lvl, int key, int *val);
+
 	/* used to traverse nodes in the skiplist */
-	Node *readNext(Node **node1, int lvl);
-	Node *scanKey(Node *node1, int lvl, int val);
-	Node *helpDelete(Node *node1, int lvl);
+	PQNode *readNext(PQNode **node1, int lvl);
+	bool isMarked(PQVLink& val);
+
+	PQNode *scanKey(PQNode **node1, int lvl, int key);
+	PQNode *helpDelete(PQNode *node1, int lvl);
+
+	/* safe memory management of nodes (based on what was in paper) 
+		still unsure about the details of these */
+	PQNode *mallocNode();
+	PQNode *readNode(PQLink& addr);
+	PQNode *copyNode(PQNode *node);
+	void releaseNode(PQNode *node);
+
+	void removeNode(Node *node, Node **prev, int level);
+
+
+	int randomLevel();
 
 	int size_;
+	int maxLevel_;
+
+	Node *head_, *tail_;
 };
 
 
