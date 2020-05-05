@@ -141,6 +141,8 @@ private:
 	PQNode *scanKey(PQNode **node1, int lvl, int key);
 	PQNode *helpDelete(PQNode *node1, int lvl);
 
+	void removeNode(PQNode *node, PQNode **prev, int level);
+
 	/* safe memory management of nodes (based on what was in paper) 
 		still unsure about the details of these */
 	PQNode *mallocNode();
@@ -148,15 +150,13 @@ private:
 	PQNode *copyNode(PQNode *node);
 	void releaseNode(PQNode *node);
 
-	void removeNode(Node *node, Node **prev, int level);
-
 
 	int randomLevel();
 
 	int size_;
 	int maxLevel_;
 
-	Node *head_, *tail_;
+	PQNode *head_, *tail_;
 };
 
 

@@ -221,17 +221,25 @@ SkipList::print()
 /*					   Parallel Skip List`						*/
 /**********************************************/
 
-#define DEFAULT_MAX_LVL 10 /* corresponds to around 2^10 levels */
+#define DEFAULT_MAX_LVL 20 /* corresponds to around 1,000,000 nodes */
 
 PQueue::PQueue() : PQueue(DEFAULT_MAX_LVL) {}
 
-PQueue::PQueue(int maxLevel) : size_(0), maxLevel_(maxLevel) {}
+PQueue::PQueue(int maxLevel) : size_(0), maxLevel_(maxLevel) {
+	int headVal = -1,
+		tailVal = -1;
+	head_ = createNode(1, INT_MIN, &headVal);
+	tail_ = createNode(1, INT_MAX, &tailVal);
+
+	head_->nxt_[0].ptr32.node = tail_;
+	head_->nxt_[0].ptr32.del = false;
+}
 
 bool
 PQueue::push(int key, int *val)
 {
-	Node *node1, *node2, *newNode;
-	Node **savedNodes = new Node *[maxLevel_];
+	PQNode *node1, *node2, *newNode;
+	PQNode **savedNodes = new PQNode * [maxLevel_];
 
 	int level = randomLevel(); 
 	newNode = createNode(level, key, val);
@@ -247,7 +255,7 @@ PQueue::push(int key, int *val)
 	}
 
 	while (true) {
-		node2 = scanKey(&node1, 0, val);
+		node2 = scanKey(&node1, 0, key);
 		PQVLink val2 = node2->val_;
 
 		if (!isMarked(val2) && node2->key_ != key) {
@@ -255,7 +263,7 @@ PQueue::push(int key, int *val)
 				releaseNode(node1);
 				releaseNode(node2);
 				for (int i  = 1; i < level - 1; ++i) {
-					releaseNode(savedNodes[i])
+					releaseNode(savedNodes[i]);
 				}
 				releaseNode(newNode);
 				releaseNode(newNode);
@@ -266,7 +274,7 @@ PQueue::push(int key, int *val)
 			}
 		}
 
-		newNode->nxt_[0]->ptr32 = { node2, false };
+		newNode->nxt_[0].ptr32 = { node2, false };
 		releaseNode(node2);
 		if (__sync_bool_compare_and_swap(&(node1->nxt_[0]), { node2, false }, { newNode, false })) {
 			releaseNode(node1);
@@ -274,13 +282,13 @@ PQueue::push(int key, int *val)
 		}
 	}
 
-	for (int i = 0; i < randLvl; ++i) {
+	for (int i = 1; i < level - 1; ++i) {
 		newNode->validLvl_ = i;
 		node1 = savedNodes[i];
 
 		while (true) {
-			node2 = scanKey(&node1, i, val);
-			newNode->nxt_[i]->ptr32 = { node2, false };
+			node2 = scanKey(&node1, i, key);
+			newNode->nxt_[i].ptr32 = { node2, false };
 			releaseNode(node2);
 			if (isMarked(newNode->val_) ||
 				__sync_bool_compare_and_swap(&(node1->nxt_[i]), node1->nxt_[i], { newNode, false })) {
@@ -302,8 +310,7 @@ PQueue::push(int key, int *val)
 int *
 PQueue::pop()
 {
-	Node *prev, 
-		*last, 
+	PQNode *prev,
 		*node1, 
 		*node2;
 
@@ -320,7 +327,7 @@ PQueue::pop()
 		int *val = valLink.ptr32.p;
 		bool del = valLink.ptr32.del;
 
-		if (node1 != prev->nxt_[0]->ptr32.node) {
+		if (node1 != prev->nxt_[0].ptr32.node) {
 			releaseNode(node1);
 			continue;
 		}
@@ -338,11 +345,15 @@ PQueue::pop()
 	}
 
 	for (int i = 0; i < node1->lvl_ - 1; ++i) {
+		PQLink v;
+		bool del = true;
 		do {
-			PQLink& v = node1->nxt_[i];
-		} while (v.ptr32.del || __sync_bool_compare_and_swap(&(node1->nxt_[i]), { node2, false }, { node2, true }));
+			v = node1->nxt_[i];
+			node2 = v.ptr32.node;
+			del = v.ptr32.del;
+		} while (del || __sync_bool_compare_and_swap(&(node1->nxt_[i]), { node2, false }, { node2, true }));
 	}
-	prev = copyNode(head);
+	prev = copyNode(head_);
 	for (int i = node1->lvl_ - 1; i >= 0; --i) {
 		removeNode(node1, &prev, i);
 	}
@@ -357,14 +368,14 @@ PQueue::pop()
 }
 
 
-Node *
-PQueue::readNext(Node **node1, int lvl)
+PQNode *
+PQueue::readNext(PQNode **node1, int lvl)
 {
 	if (isMarked((*node1)->val_)) {
 		*node1 = helpDelete(*node1, lvl);
 	}
 
-	Node *node2 = readNode((*node1)->nxt_[lvl]);
+	PQNode *node2 = readNode((*node1)->nxt_[lvl]);
 	while (!node2) {
 		*node1 = helpDelete(*node1, lvl);
 		node2 = readNode((*node1)->nxt_[lvl]);
@@ -376,13 +387,14 @@ PQueue::readNext(Node **node1, int lvl)
 bool 
 PQueue::isMarked(PQVLink& val)
 {
+	/* this function call might be more expensive than its worth */
 	return val.ptr32.del;
 }
 
-Node *
-PQueue::scanKey(Node **node1, int lvl, int key)
+PQNode *
+PQueue::scanKey(PQNode **node1, int lvl, int key)
 {
-	Node *node2 = readNext(node1, lvl);
+	PQNode *node2 = readNext(node1, lvl);
 	while (node2->key_ < key) {
 		releaseNode(*node1);
 		*node1 = node2;
@@ -404,6 +416,41 @@ PQueue::createNode(int lvl, int key, int *val)
 	return node;
 }
 
+void
+PQueue::removeNode(PQNode *node, PQNode **prev, int level)
+{
+	PQNode *last;
+
+	while (true) {
+		PQLink l = node->nxt_[level];
+
+		if (l.ptr32.node == nullptr && l.ptr32.del) {
+			break;
+		}
+
+		last = scanKey(prev, level, node->key_);
+		releaseNode(last);
+
+		if (last != node || 
+			(node->nxt_[level].ptr32.node == nullptr && !node->nxt_[level].ptr32.del)) {
+			break;
+		}
+
+		PQLink newLink;
+		newLink.ptr32.node = node->nxt_[level].ptr32.node;
+		newLink.ptr32.del = false;
+		if (__sync_bool_compare_and_swap(&((*prev)->nxt_[level]), (*prev)->nxt_[level], newLink)) {
+			node->nxt_[level].ptr32.node = nullptr;
+			node->nxt_[level].ptr32.del = true;
+			break;
+		}
+
+		if (node->nxt_[level].ptr32.node == nullptr && node->nxt_[level].ptr32.del) {
+			break;
+		}
+	}
+}
+
 PQNode *
 PQueue::mallocNode()
 {
@@ -423,27 +470,14 @@ PQueue::readNode(PQLink& addr)
 PQNode *
 PQueue::copyNode(PQNode *node)
 {
-
+	/* increase the reference count for this node */
+	return node;
 }
 
-void
-PQueue::removeNode(Node *node, Node **prev, int level)
+void 
+PQueue::releaseNode(PQNode *node)
 {
-	Node *last;
-
-	while (true) {
-		PQLink l = node->nxt_[level];
-
-		if (l.ptr32.node == nullptr && l.ptr32.del) {
-			break;
-		}
-
-		last = scanKey(prev, level, node->key_);
-		releaseNode(last);
-
-		PQVLink v; = { nullptr, true };
-		if (last != node || )
-	}
+	/* recursively call releaseNode on the nodes that this
+	node has owned pointers to (i.e. the prev pointer) */
 }
 
-void releaseNode(PQNode *node);
