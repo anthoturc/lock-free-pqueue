@@ -21,6 +21,7 @@
 #define _LOCK_FREE_PQUEUE_HPP_
 
 #include <cstdint>
+#include <atomic>
 
 /* forward declarations */
 class Node;
@@ -80,6 +81,9 @@ private:
 
 /* the remainder of this file is based on the paper (linked above) */
 
+#define DEL_MASK 0x0003
+#define PTR_MASK (~DEL_MASK)
+
 /*
  *	allows for using the last bit of the pointer
  *	as a true/false value (see paper)
@@ -136,7 +140,7 @@ private:
 
 	/* used to traverse nodes in the skiplist */
 	PQNode *readNext(PQNode **node1, int lvl);
-	bool isMarked(PQVLink& val);
+	bool isMarked(uintptr_t w);
 
 	PQNode *scanKey(PQNode **node1, int lvl, int key);
 	PQNode *helpDelete(PQNode *node1, int lvl);
@@ -150,10 +154,12 @@ private:
 	PQNode *copyNode(PQNode *node);
 	void releaseNode(PQNode *node);
 
+	void *getPointer(uintptr_t w);
+
 
 	int randomLevel();
 
-	int size_;
+	std::atomic<int> size_;
 	int maxLevel_;
 
 	PQNode *head_, *tail_;

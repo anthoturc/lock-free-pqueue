@@ -258,8 +258,8 @@ PQueue::push(int key, int *val)
 		node2 = scanKey(&node1, 0, key);
 		PQVLink val2 = node2->val_;
 
-		if (!isMarked(val2) && node2->key_ != key) {
-			if (__sync_bool_compare_and_swap(&(node2->val_), val2, val)) {
+		if (!isMarked(val2.w) && node2->key_ != key) {
+			if (__sync_bool_compare_and_swap((uintptr_t *)&(node2->val_.w), node2->val_.w,  (uintptr_t)val)) {
 				releaseNode(node1);
 				releaseNode(node2);
 				for (int i  = 1; i < level - 1; ++i) {
@@ -276,7 +276,10 @@ PQueue::push(int key, int *val)
 
 		newNode->nxt_[0].ptr32 = { node2, false };
 		releaseNode(node2);
-		if (__sync_bool_compare_and_swap(&(node1->nxt_[0]), { node2, false }, { newNode, false })) {
+		PQLink newLink;
+		newLink.ptr32.node = newNode;
+		newLink.ptr32.del = false;
+		if (__sync_bool_compare_and_swap((uintptr_t *)(&(node1->nxt_[0].w)), (uintptr_t)(node1->nxt_[0].w), newLink.w)) {
 			releaseNode(node1);
 			break;
 		}
@@ -290,8 +293,11 @@ PQueue::push(int key, int *val)
 			node2 = scanKey(&node1, i, key);
 			newNode->nxt_[i].ptr32 = { node2, false };
 			releaseNode(node2);
-			if (isMarked(newNode->val_) ||
-				__sync_bool_compare_and_swap(&(node1->nxt_[i]), node1->nxt_[i], { newNode, false })) {
+			PQLink newLink;
+			newLink.ptr32.node = newNode;
+			newLink.ptr32.del = false;
+			if (isMarked(newNode->val_.w) ||
+				__sync_bool_compare_and_swap((uintptr_t *)(&(node1->nxt_[i].w)), node1->nxt_[i].w, newLink.w)) {
 				releaseNode(node1);
 				break;
 			}
@@ -299,11 +305,12 @@ PQueue::push(int key, int *val)
 	}
 
 	newNode->validLvl_ = level;
-	if (isMarked(newNode->val_)) {
+	if (isMarked(newNode->val_.w)) {
 		newNode = helpDelete(newNode, 0);
 	}
 
 	releaseNode(newNode);
+	size_++;
 	return true;
 }
 
@@ -324,16 +331,18 @@ PQueue::pop()
 		}
 	retry: /* it was cool to see this forbidden jutsu being used */
 		PQVLink valLink = node1->val_;
-		int *val = valLink.ptr32.p;
-		bool del = valLink.ptr32.del;
+		int *val = (int *)getPointer(valLink.w);
+		bool del = isMarked(valLink.w);
 
-		if (node1 != prev->nxt_[0].ptr32.node) {
+		if (node1 != (PQNode *)getPointer(prev->nxt_[0].w)) {
 			releaseNode(node1);
 			continue;
 		}
 
+		PQVLink newVLink;
+		newVLink.ptr32 = { val, true };
 		if (!del) {
-			if (__sync_bool_compare_and_swap(&(node1->val_), valLink, { val, true })) {
+			if (__sync_bool_compare_and_swap((uintptr_t *)&(node1->val_.w), valLink.w, newVLink.w)) {
 				node1->prev_ = prev;
 				break;
 			} else goto retry;
@@ -346,12 +355,17 @@ PQueue::pop()
 
 	for (int i = 0; i < node1->lvl_ - 1; ++i) {
 		PQLink v;
+		v.ptr32.del = true;
+		PQLink toSet;
 		bool del = true;
 		do {
 			v = node1->nxt_[i];
-			node2 = v.ptr32.node;
-			del = v.ptr32.del;
-		} while (del || __sync_bool_compare_and_swap(&(node1->nxt_[i]), { node2, false }, { node2, true }));
+			node2 = (PQNode *)getPointer(v.w);
+			del = isMarked(v.w);
+			
+			toSet.ptr32.node = node2;
+			toSet.ptr32.del = true;			
+		} while (del || __sync_bool_compare_and_swap((uintptr_t *)(&(node1->nxt_[i].w)), node1->nxt_[i].w, toSet.w));
 	}
 	prev = copyNode(head_);
 	for (int i = node1->lvl_ - 1; i >= 0; --i) {
@@ -364,14 +378,14 @@ PQueue::pop()
 	releaseNode(node1);
 	releaseNode(node1);
 
+	size_--;
 	return val.ptr32.p;
 }
-
 
 PQNode *
 PQueue::readNext(PQNode **node1, int lvl)
 {
-	if (isMarked((*node1)->val_)) {
+	if (isMarked((*node1)->val_.w)) {
 		*node1 = helpDelete(*node1, lvl);
 	}
 
@@ -385,10 +399,10 @@ PQueue::readNext(PQNode **node1, int lvl)
 }
 
 bool 
-PQueue::isMarked(PQVLink& val)
+PQueue::isMarked(uintptr_t w)
 {
-	/* this function call might be more expensive than its worth */
-	return val.ptr32.del;
+	/* mask out the last two bits to get the boolean */
+	return w & DEL_MASK;
 }
 
 PQNode *
@@ -432,20 +446,19 @@ PQueue::removeNode(PQNode *node, PQNode **prev, int level)
 		releaseNode(last);
 
 		if (last != node || 
-			(node->nxt_[level].ptr32.node == nullptr && !node->nxt_[level].ptr32.del)) {
+			((PQNode *)getPointer(node->nxt_[level].w) == nullptr && !node->nxt_[level].ptr32.del)) {
 			break;
 		}
 
 		PQLink newLink;
-		newLink.ptr32.node = node->nxt_[level].ptr32.node;
+		newLink.ptr32.node = (PQNode *)getPointer(node->nxt_[level].w);
 		newLink.ptr32.del = false;
-		if (__sync_bool_compare_and_swap(&((*prev)->nxt_[level]), (*prev)->nxt_[level], newLink)) {
-			node->nxt_[level].ptr32.node = nullptr;
-			node->nxt_[level].ptr32.del = true;
+		if (__sync_bool_compare_and_swap((uintptr_t *)&((*prev)->nxt_[level].w), (*prev)->nxt_[level].w, newLink.w)) {
+			node->nxt_[level].ptr32 = { nullptr, true };
 			break;
 		}
 
-		if (node->nxt_[level].ptr32.node == nullptr && node->nxt_[level].ptr32.del) {
+		if ((PQNode *)getPointer(node->nxt_[level].w) == nullptr && isMarked(node->nxt_[level].w)) {
 			break;
 		}
 	}
@@ -481,3 +494,49 @@ PQueue::releaseNode(PQNode *node)
 	node has owned pointers to (i.e. the prev pointer) */
 }
 
+void *
+PQueue::getPointer(uintptr_t w)
+{
+	return (void *)(w & PTR_MASK);
+}
+
+int 
+PQueue::randomLevel()
+{
+	/* simulate maxLevel_ coin tosses */
+	int rndLevel = 1;
+	for (int i = 1; i < maxLevel_; ++i) {
+		if (rand() % 2 == 0) ++rndLevel;
+	} 
+	return rndLevel;
+}
+
+PQNode *
+PQueue::helpDelete(PQNode *node, int lvl)
+{
+	PQNode *node2, *prev;
+	for (int i = lvl; i < node->lvl_; ++i) {
+		PQLink toSet;
+		bool d;
+		do {
+			d = isMarked(node->nxt_[i].w);
+			node2 = (PQNode *)getPointer(node->nxt_[i].w);
+			toSet.ptr32 = { node2, true };
+		} while (d || __sync_bool_compare_and_swap((uintptr_t *)(&(node->nxt_[i].w)), node->nxt_[i].w, toSet.w));
+	}
+
+	prev = node->prev_;
+	if (!prev || lvl >= prev->validLvl_) {
+		prev = copyNode(head_);
+		for (int i = maxLevel_ - 1; i >= lvl; --i) {
+			node2 = scanKey(&prev, i, node->key_);
+			releaseNode(node2);
+		}
+	} else {
+		copyNode(prev);
+	}
+
+	removeNode(node, &prev, lvl);
+	releaseNode(node);
+	return prev;
+}
