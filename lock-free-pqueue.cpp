@@ -285,7 +285,7 @@ PQueue::push(int key, int *val)
 		}
 	}
 
-	for (int i = 1; i < level - 1; ++i) {
+	for (int i = 1; i < level; ++i) {
 		newNode->validLvl_ = i;
 		node1 = savedNodes[i];
 
@@ -353,7 +353,7 @@ PQueue::pop()
 		prev = node1;
 	}
 
-	for (int i = 0; i < node1->lvl_ - 1; ++i) {
+	for (int i = 0; i < node1->lvl_; ++i) {
 		PQLink v;
 		v.ptr32.del = true;
 		PQLink toSet;
