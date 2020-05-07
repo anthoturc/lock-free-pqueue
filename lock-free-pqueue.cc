@@ -2,9 +2,11 @@
 #include <cstdlib>
 #include <ctime>
 #include <iostream>
+#include <cassert>
+#include <random>
 
 
-#include "lock-free-pqueue.hpp"
+#include "lock-free-pqueue.h"
 
 Node::Node(int val, int height) 
 	: val_(val), height_(height) 
@@ -225,14 +227,16 @@ SkipList::print()
 
 PQueue::PQueue() : PQueue(DEFAULT_MAX_LVL) {}
 
-PQueue::PQueue(int maxLevel) : size_(0), maxLevel_(maxLevel) {
+PQueue::PQueue(int maxLevel) 
+	: size_(0), maxLevel_(maxLevel) 
+{
 	int headVal = -1,
 		tailVal = -1;
-	head_ = createNode(1, INT_MIN, &headVal);
-	tail_ = createNode(1, INT_MAX, &tailVal);
+	head_ = createNode(maxLevel_, INT_MIN, &headVal);
+	tail_ = createNode(maxLevel_, INT_MAX, &tailVal);
 
-	head_->nxt_[0].ptr32.node = tail_;
-	head_->nxt_[0].ptr32.del = false;
+	head_->nxt_[0].node = tail_;
+	head_->nxt_[0].w &= 0xFFFFFFFFFFFE; /* lowest bit should be 0 */
 }
 
 bool
@@ -258,7 +262,7 @@ PQueue::push(int key, int *val)
 		node2 = scanKey(&node1, 0, key);
 		PQVLink val2 = node2->val_;
 
-		if (!isMarked(val2.w) && node2->key_ != key) {
+		if (!isMarked(val2.w) && node2->key_ == key) {
 			if (__sync_bool_compare_and_swap((uintptr_t *)&(node2->val_.w), node2->val_.w,  (uintptr_t)val)) {
 				releaseNode(node1);
 				releaseNode(node2);
@@ -274,11 +278,12 @@ PQueue::push(int key, int *val)
 			}
 		}
 
-		newNode->nxt_[0].ptr32 = { node2, false };
+		newNode->nxt_[0].node = node2;
+		newNode->nxt_[0].w &= 0xFFFFFFFFFFFE;
 		releaseNode(node2);
 		PQLink newLink;
-		newLink.ptr32.node = newNode;
-		newLink.ptr32.del = false;
+		newLink.node = newNode;
+		newLink.w = newLink.w & 0xFFFFFFFFFFFE; // the lowest bit is a boolean 
 		if (__sync_bool_compare_and_swap((uintptr_t *)(&(node1->nxt_[0].w)), (uintptr_t)(node1->nxt_[0].w), newLink.w)) {
 			releaseNode(node1);
 			break;
@@ -291,11 +296,12 @@ PQueue::push(int key, int *val)
 
 		while (true) {
 			node2 = scanKey(&node1, i, key);
-			newNode->nxt_[i].ptr32 = { node2, false };
+			newNode->nxt_[i].node = node2;
+			newNode->nxt_[i].w &= 0xFFFFFFFFFFFE;
 			releaseNode(node2);
 			PQLink newLink;
-			newLink.ptr32.node = newNode;
-			newLink.ptr32.del = false;
+			newLink.node = newNode;
+			newLink.w = newLink.w & 0xFFFFFFFFFFFE;
 			if (isMarked(newNode->val_.w) ||
 				__sync_bool_compare_and_swap((uintptr_t *)(&(node1->nxt_[i].w)), node1->nxt_[i].w, newLink.w)) {
 				releaseNode(node1);
@@ -317,6 +323,8 @@ PQueue::push(int key, int *val)
 int *
 PQueue::pop()
 {
+	if (!size_.load()) return nullptr;
+
 	PQNode *prev,
 		*node1, 
 		*node2;
@@ -340,7 +348,8 @@ PQueue::pop()
 		}
 
 		PQVLink newVLink;
-		newVLink.ptr32 = { val, true };
+		newVLink.p = val;
+		newVLink.w |= 0x1; /* set lowest bit */
 		if (!del) {
 			if (__sync_bool_compare_and_swap((uintptr_t *)&(node1->val_.w), valLink.w, newVLink.w)) {
 				node1->prev_ = prev;
@@ -355,7 +364,6 @@ PQueue::pop()
 
 	for (int i = 0; i < node1->lvl_; ++i) {
 		PQLink v;
-		v.ptr32.del = true;
 		PQLink toSet;
 		bool del = true;
 		do {
@@ -363,8 +371,8 @@ PQueue::pop()
 			node2 = (PQNode *)getPointer(v.w);
 			del = isMarked(v.w);
 			
-			toSet.ptr32.node = node2;
-			toSet.ptr32.del = true;			
+			toSet.node = node2;
+			toSet.w |= 0x1; /* set lowest bit */			
 		} while (del || __sync_bool_compare_and_swap((uintptr_t *)(&(node1->nxt_[i].w)), node1->nxt_[i].w, toSet.w));
 	}
 	prev = copyNode(head_);
@@ -379,7 +387,7 @@ PQueue::pop()
 	releaseNode(node1);
 
 	size_--;
-	return val.ptr32.p;
+	return (int *)getPointer(val.w);
 }
 
 PQNode *
@@ -402,7 +410,7 @@ bool
 PQueue::isMarked(uintptr_t w)
 {
 	/* mask out the last two bits to get the boolean */
-	return w & DEL_MASK;
+	return w & 0x1;
 }
 
 PQNode *
@@ -416,6 +424,7 @@ PQueue::scanKey(PQNode **node1, int lvl, int key)
 	}
 	return node2;
 }
+// 0xfffedaf0}
 
 PQNode *
 PQueue::createNode(int lvl, int key, int *val)
@@ -426,7 +435,8 @@ PQueue::createNode(int lvl, int key, int *val)
 	node->lvl_ = lvl;
 	node->key_ = key;
 	node->nxt_ = new PQLink[lvl];
-	node->val_.ptr32 = { val, false };
+	node->val_.p =  val;
+	node->val_.w &= 0xFFFFFFFFFFFE; /* set lowest bit to false */
 	return node;
 }
 
@@ -438,7 +448,7 @@ PQueue::removeNode(PQNode *node, PQNode **prev, int level)
 	while (true) {
 		PQLink l = node->nxt_[level];
 
-		if (l.ptr32.node == nullptr && l.ptr32.del) {
+		if ((PQNode *)getPointer(l.w) == nullptr && isMarked(l.w)) {
 			break;
 		}
 
@@ -446,15 +456,16 @@ PQueue::removeNode(PQNode *node, PQNode **prev, int level)
 		releaseNode(last);
 
 		if (last != node || 
-			((PQNode *)getPointer(node->nxt_[level].w) == nullptr && !node->nxt_[level].ptr32.del)) {
+			((PQNode *)getPointer(node->nxt_[level].w) == nullptr && !isMarked(node->nxt_[level].w))) {
 			break;
 		}
 
 		PQLink newLink;
-		newLink.ptr32.node = (PQNode *)getPointer(node->nxt_[level].w);
-		newLink.ptr32.del = false;
+		newLink.node = (PQNode *)getPointer(node->nxt_[level].w);
+		newLink.w &= 0xFFFFFFFFFFFE; /* lowest bit to 0 */
 		if (__sync_bool_compare_and_swap((uintptr_t *)&((*prev)->nxt_[level].w), (*prev)->nxt_[level].w, newLink.w)) {
-			node->nxt_[level].ptr32 = { nullptr, true };
+			node->nxt_[level].node = nullptr;
+			node->nxt_[level].w |= 0x1;
 			break;
 		}
 
@@ -468,16 +479,18 @@ PQNode *
 PQueue::mallocNode()
 {
 	/* I really do not know what they did here :/ */
-	return new PQNode;
+	PQNode *newNode = new PQNode;
+	assert(((uintptr_t)newNode & 0x1) == 0);
+	return newNode;
 }
 
 PQNode *
 PQueue::readNode(PQLink& addr)
 {
 	/* node marked for deletion, so return a nullptr */
-	if (addr.ptr32.del) return nullptr;
+	if (isMarked(addr.w)) return nullptr;
 
-	return addr.ptr32.node;
+	return (PQNode *)getPointer(addr.w);
 }
 
 PQNode *
@@ -497,16 +510,18 @@ PQueue::releaseNode(PQNode *node)
 void *
 PQueue::getPointer(uintptr_t w)
 {
-	return (void *)(w & PTR_MASK);
+	return (void *)(w & 0xFFFFFFFFFFFE);
 }
 
 int 
 PQueue::randomLevel()
 {
+  std::default_random_engine generator;
+  std::uniform_int_distribution<int> distribution(0,1); /* for heads or tails */
 	/* simulate maxLevel_ coin tosses */
 	int rndLevel = 1;
 	for (int i = 1; i < maxLevel_; ++i) {
-		if (rand() % 2 == 0) ++rndLevel;
+		if (distribution(generator) == 0) ++rndLevel;
 	} 
 	return rndLevel;
 }
@@ -517,12 +532,18 @@ PQueue::helpDelete(PQNode *node, int lvl)
 	PQNode *node2, *prev;
 	for (int i = lvl; i < node->lvl_; ++i) {
 		PQLink toSet;
+		PQLink old;
 		bool d;
 		do {
 			d = isMarked(node->nxt_[i].w);
 			node2 = (PQNode *)getPointer(node->nxt_[i].w);
-			toSet.ptr32 = { node2, true };
-		} while (d || __sync_bool_compare_and_swap((uintptr_t *)(&(node->nxt_[i].w)), node->nxt_[i].w, toSet.w));
+
+			old.node = node2;
+			old.w &= 0xFFFFFFFFFFFE;
+			
+			toSet.node = node2;
+			toSet.w |= 0x1; // set lowest bit to high 
+		} while (!d && !__sync_bool_compare_and_swap((uintptr_t *)(&(node->nxt_[i].w)), node->nxt_[i].w, toSet.w));
 	}
 
 	prev = node->prev_;
@@ -539,4 +560,10 @@ PQueue::helpDelete(PQNode *node, int lvl)
 	removeNode(node, &prev, lvl);
 	releaseNode(node);
 	return prev;
+}
+
+int 
+PQueue::size()
+{
+	return size_.load();
 }

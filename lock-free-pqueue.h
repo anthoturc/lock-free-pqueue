@@ -17,16 +17,17 @@
  * 	of records.
  */
 
-#ifndef _LOCK_FREE_PQUEUE_HPP_
-#define _LOCK_FREE_PQUEUE_HPP_
+#ifndef _LOCK_FREE_PQUEUE_H_
+#define _LOCK_FREE_PQUEUE_H_
 
 #include <cstdint>
+#include <stdint.h>
 #include <atomic>
 
 /* forward declarations */
 class Node;
 class SkipList;
-class PQNode;
+struct PQNode;
 class PQueue;
 
 /* 	Each Node will maintain a:
@@ -91,21 +92,13 @@ private:
 union PQLink
 {
 	uintptr_t w; /* paper uses this to when a node should be deleted */
-	struct
-	{
-		PQNode* node;
-		bool del;		
-	} ptr32;
+	PQNode *node;
 };
 
 union PQVLink
 {
 	uintptr_t w; /* paper uses this to determine when to delete */
-	struct
-	{
-		int *p; /* assuming that the values are all integers */
-		bool del;
-	} ptr32;
+	int *p;
 };
 
 /*
@@ -134,6 +127,8 @@ public:
 	PQueue();
 	bool push(int key, int* val); /* equivalent to the insert method in the paper */
 	int* pop(); /* equivalent to the deletemin method in the paper */
+
+	int size();
 
 private:
 	PQNode *createNode(int lvl, int key, int *val);
@@ -166,4 +161,4 @@ private:
 };
 
 
-#endif /* _LOCK_FREE_PQUEUE_HPP_ */
+#endif /* _LOCK_FREE_PQUEUE_H_ */
