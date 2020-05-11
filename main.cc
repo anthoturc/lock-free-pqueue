@@ -27,30 +27,32 @@ void getRandomVals(vpii&, pqi&, PQueue&, int *, int);
 int
 main()
 {
-	static_assert(sizeof(PQLink) == 8);
-	static_assert(sizeof(PQVLink) == 8);
+	static_assert(sizeof(PQLink) == sizeof(uintptr_t));
+	static_assert(sizeof(PQVLink) == sizeof(uintptr_t));
 	
 	pqi stlPQ;
 	PQueue myPQ;
+	int val = 10;
+	myPQ.push(0, &val);
 
-	srand(1); // 1 is the seed 
-	int nRand = 25;
-	int vals[nRand];
-	vpii pairs(nRand);
+	// srand(1); // 1 is the seed 
+	// int nRand = 25;
+	// int vals[nRand];
+	// vpii pairs(nRand);
 	
 
-	getRandomVals(pairs, stlPQ, myPQ, vals, nRand);
+	// getRandomVals(pairs, stlPQ, myPQ, vals, nRand);
+
+	// // for (int i = 0; i < nRand; ++i) {
+	// // 	std::cout << pairs[i].first << " -> " << *(pairs[i].second) << "\n";
+	// // }
 
 	// for (int i = 0; i < nRand; ++i) {
-	// 	std::cout << pairs[i].first << " -> " << *(pairs[i].second) << "\n";
+	// 	assert(stlPQ.top() == *(myPQ.pop()));
+	// 	stlPQ.pop();
 	// }
 
-	for (int i = 0; i < nRand; ++i) {
-		assert(stlPQ.top() == *(myPQ.pop()));
-		stlPQ.pop();
-	}
-
-	// for (int i)
+	// // for (int i)
 
 
 	return 0;

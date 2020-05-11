@@ -236,7 +236,7 @@ PQueue::PQueue(int maxLevel)
 	tail_ = createNode(maxLevel_, INT_MAX, &tailVal);
 
 	head_->nxt_[0].node = tail_;
-	head_->nxt_[0].w &= 0xFFFFFFFFFFFE; /* lowest bit should be 0 */
+	head_->nxt_[0].w &= FALSE_MASK; /* lowest bit should be 0 */
 }
 
 bool
@@ -534,7 +534,8 @@ PQueue::helpDelete(PQNode *node, int lvl)
 		PQLink toSet;
 		PQLink old;
 		bool d;
-		do {
+
+		while (true) {
 			d = isMarked(node->nxt_[i].w);
 			node2 = (PQNode *)getPointer(node->nxt_[i].w);
 
@@ -543,7 +544,21 @@ PQueue::helpDelete(PQNode *node, int lvl)
 			
 			toSet.node = node2;
 			toSet.w |= 0x1; // set lowest bit to high 
-		} while (!d && !__sync_bool_compare_and_swap((uintptr_t *)(&(node->nxt_[i].w)), node->nxt_[i].w, toSet.w));
+			
+			if (d || __sync_bool_compare_and_swap((uintptr_t *)(&(node->nxt_[i].w)), old.w, toSet.w)) {
+				break;
+			}
+		}
+		// do {
+		// 	d = isMarked(node->nxt_[i].w);
+		// 	node2 = (PQNode *)getPointer(node->nxt_[i].w);
+
+		// 	old.node = node2;
+		// 	old.w &= 0xFFFFFFFFFFFE;
+			
+		// 	toSet.node = node2;
+		// 	toSet.w |= 0x1; // set lowest bit to high 
+		// } while (!d && !__sync_bool_compare_and_swap((uintptr_t *)(&(node->nxt_[i].w)), node->nxt_[i].w, toSet.w));
 	}
 
 	prev = node->prev_;

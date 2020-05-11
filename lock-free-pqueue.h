@@ -82,8 +82,8 @@ private:
 
 /* the remainder of this file is based on the paper (linked above) */
 
-#define DEL_MASK 0x0003
-#define PTR_MASK (~DEL_MASK)
+const uintptr_t FALSE_MASK = (uint64_t)(-1) << 1; /* all but last bit are 1 */
+
 
 /*
  *	allows for using the last bit of the pointer
