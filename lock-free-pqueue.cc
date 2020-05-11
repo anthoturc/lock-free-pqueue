@@ -235,8 +235,13 @@ PQueue::PQueue(int maxLevel)
 	head_ = createNode(maxLevel_, INT_MIN, &headVal);
 	tail_ = createNode(maxLevel_, INT_MAX, &tailVal);
 
-	head_->nxt_[0].node = tail_;
-	head_->nxt_[0].w &= FALSE_MASK; /* lowest bit should be 0 */
+	for (int i = 0; i < maxLevel_; ++i) {
+		head_->nxt_[i].node = tail_;
+		head_->nxt_[i].w &= FALSE_MASK; /* lowest bit should be 0 */		
+	}
+
+	// head_->nxt_[0].node = tail_;
+	// head_->nxt_[0].w &= FALSE_MASK; /* lowest bit should be 0 */
 }
 
 bool
@@ -323,7 +328,7 @@ PQueue::push(int key, int *val)
 int *
 PQueue::pop()
 {
-	if (!size_.load()) return nullptr;
+	// if (!size_.load()) return nullptr;
 
 	PQNode *prev,
 		*node1, 
@@ -399,7 +404,7 @@ PQueue::readNext(PQNode **node1, int lvl)
 
 	PQNode *node2 = readNode((*node1)->nxt_[lvl]);
 	while (!node2) {
-		*node1 = helpDelete(*node1, lvl);
+		//*node1 = helpDelete(*node1, lvl);
 		node2 = readNode((*node1)->nxt_[lvl]);
 	}
 
@@ -487,6 +492,7 @@ PQueue::mallocNode()
 PQNode *
 PQueue::readNode(PQLink& addr)
 {
+	assert(addr.w != 0);
 	/* node marked for deletion, so return a nullptr */
 	if (isMarked(addr.w)) return nullptr;
 
@@ -510,7 +516,7 @@ PQueue::releaseNode(PQNode *node)
 void *
 PQueue::getPointer(uintptr_t w)
 {
-	return (void *)(w & 0xFFFFFFFFFFFE);
+	return (void *)(w & FALSE_MASK);
 }
 
 int 

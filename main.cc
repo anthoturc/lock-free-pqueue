@@ -34,6 +34,8 @@ main()
 	PQueue myPQ;
 	int val = 10;
 	myPQ.push(0, &val);
+	int *res = myPQ.pop();
+	std::cout << *res << std::endl;
 
 	// srand(1); // 1 is the seed 
 	// int nRand = 25;
