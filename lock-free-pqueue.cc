@@ -588,3 +588,21 @@ PQueue::size()
 {
 	return size_.load();
 }
+
+void
+PQueue::debugPrint()
+{
+	PQNode *tmp = head_;
+
+	while (tmp) {
+		PQVLink valLink = tmp->val_;
+		int *valP = (int *)getPointer(valLink.w);
+		std::cout << *valP << " ";
+		int lvl = tmp->lvl_;
+		for (int i = 0; i < lvl; ++i) { // comment this loop out for just the list 
+			std::cout << "- ";
+		}
+		std::cout << std::endl;
+		tmp = (PQNode *)getPointer(tmp->nxt_[0].w);
+	}
+}

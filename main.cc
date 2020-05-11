@@ -32,10 +32,16 @@ main()
 	
 	pqi stlPQ;
 	PQueue myPQ;
-	int val = 10;
-	myPQ.push(0, &val);
-	int *res = myPQ.pop();
-	std::cout << *res << std::endl;
+
+	int val1 = 10,
+		val2 = 20,
+		val3 = 30;
+	myPQ.push(0, &val1);
+	myPQ.push(1, &val2);
+	myPQ.push(2, &val3);
+	myPQ.debugPrint();
+	// int *res = myPQ.pop();
+	// std::cout << *res << std::endl;
 
 	// srand(1); // 1 is the seed 
 	// int nRand = 25;

@@ -130,6 +130,8 @@ public:
 
 	int size();
 
+	void debugPrint();
+
 private:
 	PQNode *createNode(int lvl, int key, int *val);
 
