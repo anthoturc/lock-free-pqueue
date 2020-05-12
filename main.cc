@@ -56,7 +56,7 @@ main()
 
 	srand(RAND_SEED); 
 	/* N random key val pairs, to be used across all tests */
-	int N = 10000;
+	int N = 500000;
 	vpii pairs(N);
 	getRandKeyValPairs(pairs, N);
 
