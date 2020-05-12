@@ -8,11 +8,11 @@
 #include <algorithm>
 #include <cassert>
 
-typedef std::pair<int, int *> pii;
+typedef std::pair<int, int> pii;
 
 typedef std::vector<pii> vpii;
 
-typedef std::priority_queue<int, std::vector<int>, std::greater<int>> pqi;
+typedef std::priority_queue<pii, std::vector<pii>, std::greater<pii>> pqi;
 
 void getRandomVals(vpii&, pqi&, PQueue&, int *, int);
 
@@ -33,32 +33,66 @@ main()
 	pqi stlPQ;
 	PQueue myPQ;
 
-	int val1 = 10,
-		val2 = 20,
-		val3 = 30;
-	myPQ.push(0, &val1);
-	myPQ.push(1, &val2);
-	myPQ.push(2, &val3);
-	myPQ.debugPrint();
+	// int val1 = 10,
+	// 	val2 = 20,
+	// 	val3 = 30;
+	// myPQ.push(0, &val1);
+	// myPQ.push(1, &val2);
+	// myPQ.push(2, &val3);
+	// myPQ.debugPrint();
+
+	// int *minV = myPQ.pop();
+	// std::cout << *minV << std::endl;
 	// int *res = myPQ.pop();
 	// std::cout << *res << std::endl;
 
-	// srand(1); // 1 is the seed 
-	// int nRand = 25;
+	srand(1); // 1 is the seed 
+	// int nRand = 16;
 	// int vals[nRand];
-	// vpii pairs(nRand);
-	
+	vpii pairs {
+		{ 84, 232 },
+		{ 78, 212 },
+		{ 94, 256 },
+		{ 87, 230 },
+		{ 50, 294 },
+		{ 63, 239 },
+		{ 91, 219 },
+		{ 64, 291 },
+		{ 41, 205 },
+		{ 73, 234 },
+		{ 12, 258 },
+		{ 68, 251 },
+		{ 30, 200 },
+		{ 23, 271 },
+		{ 70, 261 },
+	};
 
+	int nRand = pairs.size();
+	for (auto p : pairs) {
+		myPQ.push(p.first, &(p.second));
+		stlPQ.push(p);
+	}
+
+	// use a set to ensure unique keys
 	// getRandomVals(pairs, stlPQ, myPQ, vals, nRand);
 
-	// // for (int i = 0; i < nRand; ++i) {
-	// // 	std::cout << pairs[i].first << " -> " << *(pairs[i].second) << "\n";
-	// // }
-
 	// for (int i = 0; i < nRand; ++i) {
-	// 	assert(stlPQ.top() == *(myPQ.pop()));
-	// 	stlPQ.pop();
-	// }
+	// 	std::cout << pairs[i].first << " -> " << *(pairs[i].second) << "\n";
+	// } 
+
+	
+	myPQ.debugPrint();
+
+	for (int i = 0; i < nRand; ++i) {
+		auto stlTop = stlPQ.top();
+		stlPQ.pop();
+		PQNode *node = myPQ.pop();
+
+		// std::cout << "stl pq top:" << stlPQ.top().first << std::endl;
+		// std::cout << "concurrent pq top:" << node->key_ << std::endl;
+		assert(stlTop.first == node->key_);
+		assert(stlTop.second == *((int *)(node->val_.w & ((uintptr_t)(-1) << 1))));
+	}
 
 	// // for (int i)
 
@@ -73,9 +107,11 @@ getRandomVals(vpii& pairs, pqi& stlPQ, PQueue& myPQ, int * vals, int nRand)
 	for (int i = 0; i < nRand; ++i) {
 		int key = (rand() % (MAX_KEY - MIN_KEY + 1)) + MIN_KEY;
 		vals[i] = (rand() % (MAX_VAL - MIN_VAL + 1)) + MIN_VAL;
-		pairs[i] = { key, vals + i };
+		pairs[i] = { key, vals[i] };
 		myPQ.push(key, vals + i);
-		stlPQ.push(vals[i]);
+		stlPQ.push({ key, vals[i] });
+
+		assert(vals[i] == *(vals + i));
 	}
 }
 

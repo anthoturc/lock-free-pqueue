@@ -126,7 +126,7 @@ public:
 	PQueue(int maxLevel_);
 	PQueue();
 	bool push(int key, int* val); /* equivalent to the insert method in the paper */
-	int* pop(); /* equivalent to the deletemin method in the paper */
+	PQNode *pop(); /* equivalent to the deletemin method in the paper */
 
 	int size();
 
