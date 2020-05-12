@@ -585,7 +585,8 @@ PQueue::debugPrint()
 	PQNode *tmp = head_;
 
 	while (tmp) {
-		std::cout << tmp->key_ << "(" << *((int *)getPointer(tmp->val_.w)) << ") ";
+		int *v = (int *)getPointer(tmp->val_.w);
+		std::cout << tmp->key_ << "(" << *v << ") ";
 		int lvl = tmp->lvl_;
 		for (int i = 0; i < lvl; ++i) { // comment this loop out for just the list 
 			std::cout << "- ";

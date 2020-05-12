@@ -1,4 +1,7 @@
-#include "lock-free-pqueue.h"
+/*
+ *	Benchmarking program to determine performance of 
+ *	lock free priority queue compared to stl priority queue
+ */
 
 #include <thread>
 #include <vector>
@@ -7,6 +10,10 @@
 #include <queue>
 #include <algorithm>
 #include <cassert>
+#include <unordered_set>
+
+#include "CycleTimer.h"
+#include "lock-free-pqueue.h"
 
 typedef std::pair<int, int> pii;
 
@@ -14,15 +21,22 @@ typedef std::vector<pii> vpii;
 
 typedef std::priority_queue<pii, std::vector<pii>, std::greater<pii>> pqi;
 
-void getRandomVals(vpii&, pqi&, PQueue&, int *, int);
+typedef std::pair<double, double> pdd;
 
-
+pdd baselineInserts(vpii&);
+void getRandKeyValPairs(vpii&, int);
+double twoThreadInserts(vpii&);
+void workerInsert(PQueue&, vpii&, int, const int, std::vector<double>&);
 
 #define MIN_KEY 1
-#define MAX_KEY 100
+#define MAX_KEY 500000
 
-#define MIN_VAL 200
-#define MAX_VAL 300
+#define MIN_VAL 0
+#define MAX_VAL 1000000
+
+#define RAND_SEED 11
+
+#define FORMAT_STR "%.4f"
 
 int
 main()
@@ -30,8 +44,7 @@ main()
 	static_assert(sizeof(PQLink) == sizeof(uintptr_t));
 	static_assert(sizeof(PQVLink) == sizeof(uintptr_t));
 	
-	pqi stlPQ;
-	PQueue myPQ;
+	srand(RAND_SEED);
 
 	// int val1 = 10,
 	// 	val2 = 20,
@@ -41,78 +54,136 @@ main()
 	// myPQ.push(2, &val3);
 	// myPQ.debugPrint();
 
-	// int *minV = myPQ.pop();
-	// std::cout << *minV << std::endl;
-	// int *res = myPQ.pop();
-	// std::cout << *res << std::endl;
+	srand(RAND_SEED); 
+	/* N random key val pairs, to be used across all tests */
+	int N = 10000;
+	vpii pairs(N);
+	getRandKeyValPairs(pairs, N);
 
-	srand(1); // 1 is the seed 
-	// int nRand = 16;
-	// int vals[nRand];
-	vpii pairs {
-		{ 84, 232 },
-		{ 78, 212 },
-		{ 94, 256 },
-		{ 87, 230 },
-		{ 50, 294 },
-		{ 63, 239 },
-		{ 91, 219 },
-		{ 64, 291 },
-		{ 41, 205 },
-		{ 73, 234 },
-		{ 12, 258 },
-		{ 68, 251 },
-		{ 30, 200 },
-		{ 23, 271 },
-		{ 70, 261 },
-	};
+	pdd baseline = baselineInserts(pairs);
 
-	int nRand = pairs.size();
-	for (auto p : pairs) {
-		myPQ.push(p.first, &(p.second));
-		stlPQ.push(p);
-	}
+	std::cout << "Single Thread" << "\n";
+	std::cout << "STL Priority Queue:\t\t"; 
+	printf(FORMAT_STR, baseline.first);
+	std::cout << "s\n";
+	std::cout << "Lock Free Priority Queue:\t"; 
+	printf(FORMAT_STR, baseline.second);
+	std::cout << "s\n";
 
-	// use a set to ensure unique keys
-	// getRandomVals(pairs, stlPQ, myPQ, vals, nRand);
+
+	double total = twoThreadInserts(pairs);
+
+	std::cout << "Two Threads" << "\n";
+	std::cout << "Lock Free Priority Queue:\t"; 
+	printf(FORMAT_STR, total);
+	std::cout << "s\t"; 
+	printf(FORMAT_STR, total/std::max(baseline.first, baseline.second));
+	std::cout << "X\n";
+
 
 	// for (int i = 0; i < nRand; ++i) {
-	// 	std::cout << pairs[i].first << " -> " << *(pairs[i].second) << "\n";
-	// } 
+	// 	auto stlTop = stlPQ.top();
+	// 	stlPQ.pop();
+	// 	PQNode *node = myPQ.pop();
 
-	
-	myPQ.debugPrint();
-
-	for (int i = 0; i < nRand; ++i) {
-		auto stlTop = stlPQ.top();
-		stlPQ.pop();
-		PQNode *node = myPQ.pop();
-
-		// std::cout << "stl pq top:" << stlPQ.top().first << std::endl;
-		// std::cout << "concurrent pq top:" << node->key_ << std::endl;
-		assert(stlTop.first == node->key_);
-		assert(stlTop.second == *((int *)(node->val_.w & ((uintptr_t)(-1) << 1))));
-	}
-
-	// // for (int i)
-
+	// 	assert(stlTop.first == node->key_);
+	// 	assert(stlTop.second == *((int *)(node->val_.w & ((uintptr_t)(-1) << 1))));
+	// }
 
 	return 0;
 }
 
 void
-getRandomVals(vpii& pairs, pqi& stlPQ, PQueue& myPQ, int * vals, int nRand)
+getRandKeyValPairs(vpii& keyVals, int N)
 {
+	std::unordered_set<int> uniKey;
 
-	for (int i = 0; i < nRand; ++i) {
+	int i = 0;
+	while (i < N) {
 		int key = (rand() % (MAX_KEY - MIN_KEY + 1)) + MIN_KEY;
-		vals[i] = (rand() % (MAX_VAL - MIN_VAL + 1)) + MIN_VAL;
-		pairs[i] = { key, vals[i] };
-		myPQ.push(key, vals + i);
-		stlPQ.push({ key, vals[i] });
-
-		assert(vals[i] == *(vals + i));
+		if (uniKey.find(key) != uniKey.end()) continue;
+		
+		uniKey.insert(key);
+		int val = (rand() % (MAX_VAL - MIN_VAL + 1)) + MIN_VAL;		
+		keyVals[i] = { key, val };
+		++i;
 	}
+}
+
+pdd
+baselineInserts(vpii& keyVals) 
+{
+	PQueue lockFreePQ;
+	pqi stlPQ;
+
+	double lckFreePQTotalTime = 0.f;
+	double stlPQTotalTime = 0.f;
+
+	for (pii p : keyVals) {
+		double start_time = CycleTimer::currentSeconds();
+		lockFreePQ.push(p.first, &(p.second));
+		double end_time = CycleTimer::currentSeconds();
+
+		lckFreePQTotalTime += (end_time - start_time);
+
+		start_time = CycleTimer::currentSeconds();
+		stlPQ.push(p);
+		end_time = CycleTimer::currentSeconds();
+
+		stlPQTotalTime += (end_time - start_time);
+	}
+
+	return { stlPQTotalTime, lckFreePQTotalTime };
+}
+
+double
+twoThreadInserts(vpii& keyVals)
+{
+	PQueue pq;
+
+	const int nThreads = 2; /* including master thread */
+	std::vector<double> res(nThreads);
+	std::thread wrkers[nThreads-1];
+
+	for (int i = 0; i < nThreads-1; ++i) {
+		/* https://stackoverflow.com/questions/34078208/passing-object-by-reference-to-stdthread-in-c11 */
+		wrkers[i] = std::thread(workerInsert, std::ref(pq), std::ref(keyVals), i, nThreads, std::ref(res));
+	}
+
+	workerInsert(pq, keyVals, nThreads-1, nThreads, res);
+
+	for (int i = 0; i < nThreads-1; ++i) {
+		wrkers[i].join();
+	}
+
+	double maxTimeFromThreads = 0.f;
+	for (int i = 0; i < nThreads; ++i) {
+		maxTimeFromThreads = std::max(maxTimeFromThreads, res[i]);
+	}
+
+	return maxTimeFromThreads;
+}
+
+void
+workerInsert(PQueue& q, vpii& keyVals, int id, int nThreads, std::vector<double>& res)
+{
+	double totalTime = 0.f;
+
+	int i = id, N = keyVals.size();
+
+	while (i < N) {
+		pii keyVal = keyVals[i];
+		
+		double start_time = CycleTimer::currentSeconds();
+		q.push(keyVal.first, &(keyVal.second));
+		double end_time = CycleTimer::currentSeconds();
+
+		totalTime += (end_time - start_time);
+
+		i += nThreads;
+	}
+
+	res[id] = totalTime;
 }
 
 // seed for test inputs should be the same
