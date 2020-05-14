@@ -6,6 +6,7 @@
  * 
  *	Fast and Lock-Free Concurrent Priority Queues for Multi-Thred Systems
  *	(http://www.non-blocking.com/download/SunT03_PQueue_TR.pdf)
+ *	(http://www.cse.chalmers.se/~tsigas/papers/JPDC-Lock-free-skip-lists-and-Queues.pdf)
  * 	
  * 	by Hakan Sundell and Philippas Tsigas. 
  *
@@ -128,8 +129,6 @@ public:
 	bool push(int key, int* val); /* equivalent to the insert method in the paper */
 	PQNode *pop(); /* equivalent to the deletemin method in the paper */
 
-	int size();
-
 	void debugPrint();
 
 private:
@@ -156,11 +155,9 @@ private:
 
 	int randomLevel();
 
-	std::atomic<int> size_;
 	int maxLevel_;
 
 	PQNode *head_, *tail_;
 };
-
 
 #endif /* _LOCK_FREE_PQUEUE_H_ */

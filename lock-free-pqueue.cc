@@ -228,7 +228,7 @@ SkipList::print()
 PQueue::PQueue() : PQueue(DEFAULT_MAX_LVL) {}
 
 PQueue::PQueue(int maxLevel) 
-	: size_(0), maxLevel_(maxLevel) 
+	: maxLevel_(maxLevel) 
 {
 	int headVal = -1,
 		tailVal = -1;
@@ -318,14 +318,12 @@ PQueue::push(int key, int *val)
 	}
 
 	releaseNode(newNode);
-	size_++;
 	return true;
 }
 
 PQNode *
 PQueue::pop()
 {
-	// if (!size_.load()) return nullptr;
 
 	PQNode *prev,
 		*node1, 
@@ -386,13 +384,10 @@ PQueue::pop()
 		removeNode(node1, &prev, i);
 	}
 
-	PQVLink val = node1->val_;
-
 	releaseNode(prev);
 	releaseNode(node1);
 	releaseNode(node1);
 
-	size_--;
 	return node1;
 }
 
@@ -485,14 +480,14 @@ PQueue::mallocNode()
 {
 	/* I really do not know what they did here :/ */
 	PQNode *newNode = new PQNode;
-	assert(((uintptr_t)newNode & 0x1) == 0);
+	// assert(((uintptr_t)newNode & 0x1) == 0);
 	return newNode;
 }
 
 PQNode *
 PQueue::readNode(PQLink& addr)
 {
-	assert(addr.w != 0);
+	// assert(addr.w != 0);
 	/* node marked for deletion, so return a nullptr */
 	if (isMarked(addr.w)) return nullptr;
 
@@ -571,12 +566,6 @@ PQueue::helpDelete(PQNode *node, int lvl)
 	removeNode(node, &prev, lvl);
 	releaseNode(node);
 	return prev;
-}
-
-int 
-PQueue::size()
-{
-	return size_.load();
 }
 
 void

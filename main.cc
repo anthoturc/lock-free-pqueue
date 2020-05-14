@@ -4,15 +4,19 @@
  */
 
 #include <thread>
-#include <vector>
-#include <cstdlib>
-#include <iostream>
-#include <queue>
-#include <algorithm>
-#include <cassert>
-#include <unordered_set>
+#include <mutex>
 
-#include "CycleTimer.h"
+#include <iostream>
+
+#include <vector>
+#include <queue>
+#include <unordered_set>
+#include <algorithm>
+
+#include <cassert>
+#include <ctime>
+#include <cstdlib>
+
 #include "lock-free-pqueue.h"
 
 typedef std::pair<int, int> pii;
@@ -23,10 +27,41 @@ typedef std::priority_queue<pii, std::vector<pii>, std::greater<pii>> pqi;
 
 typedef std::pair<double, double> pdd;
 
-pdd baselineInserts(vpii&);
-void getRandKeyValPairs(vpii&, int);
-double twoThreadInserts(vpii&);
-void workerInsert(PQueue&, vpii&, int, const int, std::vector<double>&);
+
+class CoarseGrainPQ
+{
+public:
+	CoarseGrainPQ() {}
+	void push(int key, int val);
+	int size();
+private:
+	pqi q_;
+	std::mutex mtx_;
+};
+
+void
+CoarseGrainPQ::push(int key, int val)
+{
+	mtx_.lock();
+	q_.push({ key, val });
+	mtx_.unlock();
+}
+
+int
+CoarseGrainPQ::size()
+{
+	mtx_.lock();
+	int sz = q_.size();
+	mtx_.unlock();
+	return sz;
+}
+
+void PrintUsage();
+pdd SingleThreadBaseline(vpii&);
+void GetRandKeyValPairs(vpii&);
+pdd MultiThreadInserts(vpii&, int);
+void LockFreePQWorkerInsert(PQueue&, vpii&, int, int);
+void STLPQWorkerInsert(CoarseGrainPQ&, vpii&, int, int);
 
 #define MIN_KEY 1
 #define MAX_KEY 500000
@@ -38,63 +73,58 @@ void workerInsert(PQueue&, vpii&, int, const int, std::vector<double>&);
 
 #define FORMAT_STR "%.4f"
 
+/* number of elements to insert */
+const int N = 1000000;
+
 int
-main()
+main(int argc, char **argv)
 {
+
+	if (argc != 2) {
+		PrintUsage();
+		return 1;
+	}
+
+	/* second argument of argv should be number of threads */
+	int T = atoi(argv[1]);
+
 	static_assert(sizeof(PQLink) == sizeof(uintptr_t));
 	static_assert(sizeof(PQVLink) == sizeof(uintptr_t));
 	
+	/* N random key val pairs, to be used across all tests */
 	srand(RAND_SEED);
 
-	// int val1 = 10,
-	// 	val2 = 20,
-	// 	val3 = 30;
-	// myPQ.push(0, &val1);
-	// myPQ.push(1, &val2);
-	// myPQ.push(2, &val3);
-	// myPQ.debugPrint();
-
-	srand(RAND_SEED); 
-	/* N random key val pairs, to be used across all tests */
-	int N = 500000;
 	vpii pairs(N);
-	getRandKeyValPairs(pairs, N);
+	GetRandKeyValPairs(pairs);
 
-	pdd baseline = baselineInserts(pairs);
+	/* single threaded baseline */
+	pdd baseline = SingleThreadBaseline(pairs);
+	
+	double stlPQTimeSingleThread = baseline.first,
+		lckFreePQTimeSingleThread = baseline.second;
 
-	std::cout << "Single Thread" << "\n";
+	pdd totals = MultiThreadInserts(pairs, T);
+
+	double stlPQTotalTimeMultiThread = totals.first,
+		lckFreePQTimeMultiThread = totals.second;
+
+	std::cout << "Thread(s): " << T << "\n";
 	std::cout << "STL Priority Queue:\t\t"; 
-	printf(FORMAT_STR, baseline.first);
-	std::cout << "s\n";
-	std::cout << "Lock Free Priority Queue:\t"; 
-	printf(FORMAT_STR, baseline.second);
-	std::cout << "s\n";
-
-
-	double total = twoThreadInserts(pairs);
-
-	std::cout << "Two Threads" << "\n";
-	std::cout << "Lock Free Priority Queue:\t"; 
-	printf(FORMAT_STR, total);
-	std::cout << "s\t"; 
-	printf(FORMAT_STR, total/std::max(baseline.first, baseline.second));
+	printf(FORMAT_STR, stlPQTotalTimeMultiThread);
+	std::cout << "s\t\t";
+	printf(FORMAT_STR, stlPQTotalTimeMultiThread > 0 ? stlPQTimeSingleThread/stlPQTotalTimeMultiThread : 1.f);
 	std::cout << "X\n";
-
-
-	// for (int i = 0; i < nRand; ++i) {
-	// 	auto stlTop = stlPQ.top();
-	// 	stlPQ.pop();
-	// 	PQNode *node = myPQ.pop();
-
-	// 	assert(stlTop.first == node->key_);
-	// 	assert(stlTop.second == *((int *)(node->val_.w & ((uintptr_t)(-1) << 1))));
-	// }
+	std::cout << "Lock Free Priority Queue:\t"; 
+	printf(FORMAT_STR, lckFreePQTimeMultiThread);
+	std::cout << "s\t\t";
+	printf(FORMAT_STR, lckFreePQTimeSingleThread/lckFreePQTimeMultiThread);
+	std::cout << "X\n";
 
 	return 0;
 }
 
 void
-getRandKeyValPairs(vpii& keyVals, int N)
+GetRandKeyValPairs(vpii& keyVals)
 {
 	std::unordered_set<int> uniKey;
 
@@ -111,81 +141,110 @@ getRandKeyValPairs(vpii& keyVals, int N)
 }
 
 pdd
-baselineInserts(vpii& keyVals) 
+SingleThreadBaseline(vpii& keyVals) 
 {
 	PQueue lockFreePQ;
-	pqi stlPQ;
+	CoarseGrainPQ stlPQ;
 
 	double lckFreePQTotalTime = 0.f;
 	double stlPQTotalTime = 0.f;
 
+	clock_t start_time = clock();
 	for (pii p : keyVals) {
-		double start_time = CycleTimer::currentSeconds();
 		lockFreePQ.push(p.first, &(p.second));
-		double end_time = CycleTimer::currentSeconds();
-
-		lckFreePQTotalTime += (end_time - start_time);
-
-		start_time = CycleTimer::currentSeconds();
-		stlPQ.push(p);
-		end_time = CycleTimer::currentSeconds();
-
-		stlPQTotalTime += (end_time - start_time);
 	}
+	clock_t end_time = clock();
+
+	lckFreePQTotalTime = (end_time - start_time)/(double)CLOCKS_PER_SEC;
+
+	start_time = clock();
+	for (pii p : keyVals) {
+		stlPQ.push(p.first, p.second);
+	}
+	end_time = clock();	
+
+	stlPQTotalTime = (end_time - start_time)/(double)CLOCKS_PER_SEC;
+	
+
+	/* ensure the stlPQ has N elements */
+	assert(stlPQ.size() == N);
 
 	return { stlPQTotalTime, lckFreePQTotalTime };
 }
 
-double
-twoThreadInserts(vpii& keyVals)
+pdd
+MultiThreadInserts(vpii& keyVals, int T)
 {
-	PQueue pq;
+	PQueue pQ;
+	CoarseGrainPQ stlPQ;
 
-	const int nThreads = 2; /* including master thread */
-	std::vector<double> res(nThreads);
-	std::thread wrkers[nThreads-1];
+	std::vector<std::thread> wrkers(T-1);
+	
+	clock_t start_time = clock();
 
-	for (int i = 0; i < nThreads-1; ++i) {
+	/* run lock free pq inserts */
+	for (int i = 0; i < T-1; ++i) {
 		/* https://stackoverflow.com/questions/34078208/passing-object-by-reference-to-stdthread-in-c11 */
-		wrkers[i] = std::thread(workerInsert, std::ref(pq), std::ref(keyVals), i, nThreads, std::ref(res));
+		wrkers[i] = std::thread(LockFreePQWorkerInsert, std::ref(pQ), std::ref(keyVals), i, T);
 	}
 
-	workerInsert(pq, keyVals, nThreads-1, nThreads, res);
-
-	for (int i = 0; i < nThreads-1; ++i) {
+	LockFreePQWorkerInsert(pQ, keyVals, T-1, T);
+	
+	for (int i = 0; i < T-1; ++i) {
 		wrkers[i].join();
 	}
+	clock_t end_time = clock();
 
-	double maxTimeFromThreads = 0.f;
-	for (int i = 0; i < nThreads; ++i) {
-		maxTimeFromThreads = std::max(maxTimeFromThreads, res[i]);
+	double lockFreePQTotalTime = (end_time - start_time)/(double)CLOCKS_PER_SEC;
+
+	start_time = clock();
+	/* run coarse grained stl pq inserts */
+	for (int i = 0; i < T-1; ++i) {
+		wrkers[i] = std::thread(STLPQWorkerInsert, std::ref(stlPQ), std::ref(keyVals), i, T); 
 	}
 
-	return maxTimeFromThreads;
+	STLPQWorkerInsert(stlPQ, keyVals, T-1, T);
+
+	for (int i = 0; i < T-1; ++i) {
+		wrkers[i].join();
+	}
+	end_time = clock();
+
+	/* ensure the stlPQ has N elements */
+	assert(stlPQ.size() == N);
+	
+	double stlPQTotalTime = (end_time - start_time)/(double)CLOCKS_PER_SEC;
+
+
+	return { stlPQTotalTime, lockFreePQTotalTime };
 }
 
 void
-workerInsert(PQueue& q, vpii& keyVals, int id, int nThreads, std::vector<double>& res)
+LockFreePQWorkerInsert(PQueue& q, vpii& keyVals, int id, int T)
 {
-	double totalTime = 0.f;
-
-	int i = id, N = keyVals.size();
-
+	int i = id;
 	while (i < N) {
 		pii keyVal = keyVals[i];
-		
-		double start_time = CycleTimer::currentSeconds();
 		q.push(keyVal.first, &(keyVal.second));
-		double end_time = CycleTimer::currentSeconds();
-
-		totalTime += (end_time - start_time);
-
-		i += nThreads;
+		i += T;
 	}
-
-	res[id] = totalTime;
 }
 
-// seed for test inputs should be the same
+void 
+STLPQWorkerInsert(CoarseGrainPQ& q, vpii& keyVals, int id, int T)
+{
+	int i = id;
+	while (i < N) {
+		pii keyVal = keyVals[i];
+		q.push(keyVal.first, keyVal.second);
+		i += T;
+	}
+}
+
+void 
+PrintUsage()
+{
+	std::cout << "Usage: ./project-main <number-of-threads>\n";
+}
 
 // look into thread safe shared pointers (using atomic operations which take care of reference counting)
