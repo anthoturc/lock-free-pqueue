@@ -75,3 +75,39 @@ and the boolean set flag.
 
 I made use of the uintptr_t for the size of the pointer because I felt that this was explicit.
 I could have made use of size_t as well.
+
+May 6, 2020
+
+11:00 AM - 12:00 PM (1 hr)
+
+Setup correctness tests for benchmarking against the STL PQ. Found segfault/infinite loop depending 
+on changes made to the push and pop methods. Started debugging in gdb.
+
+12:00 PM - 1:00 PM (1 hr)
+
+Went to office hours for some help understanding the way the paper manipulated marking pointers.
+Changed the structure of the Link unions to avoid making them to large for the CAS operation.
+
+May 11, 2020
+
+1:00 PM - 4:00 PM (3 hr)
+
+Continued to debug also went into office hours for debugging help (using gdb for this). 
+Infinite loop issue related to scanKey and readNext. Was incorrectly initializing the head and tail 
+pointer as well. Got help interpreting pseudocode and fixed infinite while loop bugs. 
+
+May 12, 2020
+
+11:00 AM - 1:00 PM (2 hr)
+
+Continued implementing correctness tests and found that both push and pop work correctly. Ran tests
+against a custom stl priority queue. Discussed results in office hours and determined next steps. These
+consisted of implementing the CoarseGrainPQ class that used a global lock to protect the stl pq. 
+
+Total: 10 hrs
+
+Reflection of second week:
+My second week consisted of getting my hands really dirty with the implementation of the design. I had faced several design choices myself and I wished there were more details presented in the paper. While I recorded 10 hrs here, I know that I put in more but I did not record them. The remaining hours I spent consisted of testing different numbers of insertions and trying to find why my implementation was performing so poorly against the implementation from in the paper. I could not see theirs but the results were shown. I started by looking at procedures that were not elaborated on. For example,
+randomLevel() was described in the paper but they may have used a "faster" method for generating the random numbers. I also experimented with removing the function calls to "useless" methods. I did not implement the memory management methods that they talked about. But I included them anyways for the sake of consistency.
+
+Overall this was a sick project.
